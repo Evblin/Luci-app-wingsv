@@ -1,0 +1,31 @@
+#!/bin/sh /etc/rc.common
+
+START=90
+STOP=10
+USE_PROCD=1
+
+PROG=/usr/bin/wingsv
+
+start_service() {
+	config_load wingsv
+	local enabled auto_start
+	config_get_bool enabled main enabled 0
+	config_get_bool auto_start main auto_start 0
+	[ "$enabled" = "1" ] || [ "$auto_start" = "1" ] || return 0
+
+	procd_open_instance wingsv
+	procd_set_param command "$PROG" run
+	procd_set_param respawn 3600 5 5
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_close_instance
+}
+
+reload_service() {
+	stop
+	start
+}
+
+service_triggers() {
+	procd_add_reload_trigger wingsv
+}
