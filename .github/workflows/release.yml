@@ -1,0 +1,34 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  source-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Package source install tree
+        run: |
+          tar --exclude-vcs -czf luci-app-wingsv-source.tar.gz \
+            Makefile README.md INSTALL_RU.md install.sh htdocs root
+          zip -r luci-app-wingsv-source.zip \
+            Makefile README.md INSTALL_RU.md install.sh htdocs root
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            luci-app-wingsv-source.tar.gz
+            luci-app-wingsv-source.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
