@@ -4,6 +4,12 @@ LuCI web interface and OpenWrt service wrapper inspired by WINGS V.
 
 [Инструкция на русском: установка и загрузка на роутер](INSTALL_RU.md)
 
+Quick install on OpenWrt:
+
+```sh
+sh -c "$(wget -O- https://raw.githubusercontent.com/Evblin/Luci-app-wingsv/main/install.sh)"
+```
+
 The package stores settings in `/etc/config/wingsv` and exposes:
 
 - status and service controls
