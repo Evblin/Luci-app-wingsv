@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v0.1.0"
+        required: true
+        default: "v0.1.0"
 
 permissions:
   contents: write
@@ -23,9 +28,20 @@ jobs:
           zip -r luci-app-wingsv-source.zip \
             Makefile README.md INSTALL_RU.md install.sh htdocs root
 
+      - name: Resolve release tag
+        id: release_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          name: luci-app-wingsv ${{ steps.release_tag.outputs.tag }}
           files: |
             luci-app-wingsv-source.tar.gz
             luci-app-wingsv-source.zip
