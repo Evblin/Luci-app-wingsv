@@ -1,4 +1,4 @@
-# luci-app-wingsv
+# luci-app-wingsv - В разработке 
 
 Веб-интерфейс LuCI и service wrapper для OpenWrt, вдохновленный WINGS V.
 
