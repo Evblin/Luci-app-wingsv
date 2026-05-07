@@ -1,0 +1,53 @@
+{
+	"admin/services/wingsv": {
+		"title": "WINGS V",
+		"order": 35,
+		"action": {
+			"type": "view",
+			"path": "wingsv/overview"
+		},
+		"depends": {
+			"acl": [ "luci-app-wingsv" ]
+		}
+	},
+	"admin/services/wingsv/overview": {
+		"title": "Overview",
+		"order": 1,
+		"action": {
+			"type": "view",
+			"path": "wingsv/overview"
+		}
+	},
+	"admin/services/wingsv/profiles": {
+		"title": "Profiles",
+		"order": 2,
+		"action": {
+			"type": "view",
+			"path": "wingsv/profiles"
+		}
+	},
+	"admin/services/wingsv/byedpi": {
+		"title": "ByeDPI",
+		"order": 3,
+		"action": {
+			"type": "view",
+			"path": "wingsv/byedpi"
+		}
+	},
+	"admin/services/wingsv/vkturn": {
+		"title": "VK TURN",
+		"order": 4,
+		"action": {
+			"type": "view",
+			"path": "wingsv/vkturn"
+		}
+	},
+	"admin/services/wingsv/xray": {
+		"title": "Xray",
+		"order": 5,
+		"action": {
+			"type": "view",
+			"path": "wingsv/xray"
+		}
+	}
+}
