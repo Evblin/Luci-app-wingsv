@@ -10,6 +10,28 @@
 - `wg-quick` для WireGuard
 - `awg-quick` для AmneziaWG, если он нужен
 
+## Быстрая автоматическая установка
+
+Подключитесь к роутеру по SSH и выполните:
+
+```sh
+sh -c "$(wget -O- https://raw.githubusercontent.com/Evblin/Luci-app-wingsv/main/install.sh)"
+```
+
+Если на прошивке нет `wget`, но есть `curl`:
+
+```sh
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/Evblin/Luci-app-wingsv/main/install.sh)"
+```
+
+Скрипт скачает файлы из GitHub, установит LuCI-страницы, добавит `/usr/bin/wingsv`, `/etc/init.d/wingsv`, меню LuCI, rpcd ACL, включит сервис и перезапустит `rpcd`/`uhttpd`.
+
+После установки откройте:
+
+```text
+http://192.168.1.1/cgi-bin/luci/admin/services/wingsv
+```
+
 ## Вариант 1. Сборка IPK через OpenWrt SDK
 
 Этот способ правильный для постоянной установки.
@@ -162,3 +184,21 @@ rm -rf /tmp/luci-*
 ```
 
 Потом обновите страницу LuCI в браузере.
+
+## Как сделать релиз на GitHub
+
+В репозитории добавлен workflow `.github/workflows/release.yml`.
+
+Чтобы выпустить релиз:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+GitHub Actions создаст релиз и приложит архивы:
+
+- `luci-app-wingsv-source.tar.gz`
+- `luci-app-wingsv-source.zip`
+
+Также релиз можно запустить вручную во вкладке `Actions -> Release -> Run workflow`.
