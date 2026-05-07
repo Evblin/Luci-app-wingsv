@@ -1,0 +1,246 @@
+#!/bin/sh
+
+CONFIG=wingsv
+STATUS=/tmp/wingsv.status
+LOG=/tmp/wingsv.log
+XRAY_CONFIG=/tmp/wingsv-xray.json
+WG_CONFIG=/tmp/wingsv-wg.conf
+AWG_CONFIG=/tmp/wingsv-awg.conf
+
+log() {
+	local message="$*"
+	printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$message" >> "$LOG"
+}
+
+json_escape() {
+	sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\r\n' '  '
+}
+
+status_write() {
+	local state="$1" backend="$2" message="$3"
+	printf '{"running":%s,"backend":"%s","message":"%s","updated_at":"%s"}\n' \
+		"$([ "$state" = running ] && echo true || echo false)" \
+		"$(printf '%s' "$backend" | json_escape)" \
+		"$(printf '%s' "$message" | json_escape)" \
+		"$(date '+%Y-%m-%d %H:%M:%S')" > "$STATUS"
+}
+
+bin_find() {
+	local name
+	for name in "$@"; do
+		command -v "$name" >/dev/null 2>&1 && {
+			command -v "$name"
+			return 0
+		}
+	done
+	return 1
+}
+
+config_get_main() {
+	config_load "$CONFIG"
+	config_get BACKEND main backend xray
+}
+
+start_byedpi() {
+	local enabled auto command_settings args ip port bin
+	config_get_bool enabled byedpi enabled 0
+	config_get_bool auto byedpi auto_start_with_xray 0
+	[ "$enabled" = 1 ] || [ "$auto" = 1 ] || return 0
+
+	bin="$(bin_find ciadpi byedpi)" || {
+		log "ByeDPI binary not found"
+		return 0
+	}
+
+	config_get_bool command_settings byedpi use_command_settings 1
+	config_get args byedpi cmd_args ''
+	config_get ip byedpi proxy_ip '127.0.0.1'
+	config_get port byedpi proxy_port '1080'
+
+	log "Starting ByeDPI on ${ip}:${port}"
+	if [ "$command_settings" = 1 ] && [ -n "$args" ]; then
+		# shellcheck disable=SC2086
+		"$bin" $args >> "$LOG" 2>&1 &
+	else
+		"$bin" -i "$ip" -p "$port" >> "$LOG" 2>&1 &
+	fi
+}
+
+run_xray() {
+	local bin raw local_proxy_port allow_lan sniffing ipv6 remote_dns direct_dns
+	bin="$(bin_find xray xray-core)" || {
+		status_write stopped xray "xray binary not found"
+		log "xray binary not found"
+		return 127
+	}
+
+	config_get raw xray raw_link ''
+	config_get local_proxy_port xray local_proxy_port '10808'
+	config_get_bool allow_lan xray allow_lan 0
+	config_get_bool sniffing xray sniffing_enabled 1
+	config_get_bool ipv6 xray ipv6 1
+	config_get remote_dns xray remote_dns 'https://common.dot.dns.yandex.net/dns-query'
+	config_get direct_dns xray direct_dns 'https://common.dot.dns.yandex.net/dns-query'
+
+	cat > "$XRAY_CONFIG" <<EOF
+{
+  "log": { "loglevel": "warning" },
+  "dns": {
+    "servers": [
+      "$(printf '%s' "$remote_dns" | json_escape)",
+      "$(printf '%s' "$direct_dns" | json_escape)"
+    ]
+  },
+  "inbounds": [
+    {
+      "tag": "socks",
+      "listen": "$([ "$allow_lan" = 1 ] && echo "0.0.0.0" || echo "127.0.0.1")",
+      "port": $local_proxy_port,
+      "protocol": "socks",
+      "settings": { "udp": true },
+      "sniffing": {
+        "enabled": $([ "$sniffing" = 1 ] && echo true || echo false),
+        "destOverride": ["http", "tls", "quic"]
+      }
+    }
+  ],
+  "outbounds": [
+    { "tag": "proxy", "protocol": "freedom", "settings": { "domainStrategy": "$([ "$ipv6" = 1 ] && echo AsIs || echo UseIPv4)" } },
+    { "tag": "direct", "protocol": "freedom" },
+    { "tag": "block", "protocol": "blackhole" }
+  ],
+  "_wingsv_raw_link": "$(printf '%s' "$raw" | json_escape)"
+}
+EOF
+
+	status_write running xray "xray started"
+	log "Starting Xray with generated config $XRAY_CONFIG"
+	exec "$bin" run -config "$XRAY_CONFIG"
+}
+
+write_wg_config() {
+	local target="$1" section="$2"
+	local private_key addresses dns mtu public_key preshared_key allowed_ips endpoint quick_config
+	config_get quick_config "$section" quick_config ''
+	if [ -n "$quick_config" ]; then
+		printf '%s\n' "$quick_config" > "$target"
+		return
+	fi
+
+	config_get private_key wireguard private_key ''
+	config_get addresses wireguard addresses ''
+	config_get dns wireguard dns ''
+	config_get mtu wireguard mtu '1280'
+	config_get public_key wireguard public_key ''
+	config_get preshared_key wireguard preshared_key ''
+	config_get allowed_ips wireguard allowed_ips '0.0.0.0/0, ::/0'
+	config_get endpoint wireguard endpoint ''
+
+	cat > "$target" <<EOF
+[Interface]
+PrivateKey = $private_key
+Address = $addresses
+DNS = $dns
+MTU = $mtu
+
+[Peer]
+PublicKey = $public_key
+PresharedKey = $preshared_key
+AllowedIPs = $allowed_ips
+Endpoint = $endpoint
+EOF
+}
+
+run_wg_like() {
+	local kind="$1" bin config_file
+	if [ "$kind" = amneziawg ]; then
+		bin="$(bin_find awg-quick wg-quick)" || {
+			status_write stopped amneziawg "awg-quick/wg-quick binary not found"
+			return 127
+		}
+		config_file="$AWG_CONFIG"
+		write_wg_config "$config_file" amneziawg
+	else
+		bin="$(bin_find wg-quick)" || {
+			status_write stopped wireguard "wg-quick binary not found"
+			return 127
+		}
+		config_file="$WG_CONFIG"
+		write_wg_config "$config_file" wireguard
+	fi
+
+	status_write running "$kind" "$kind started"
+	log "Starting $kind through $bin"
+	"$bin" up "$config_file" >> "$LOG" 2>&1
+	trap '"$bin" down "$config_file" >> "$LOG" 2>&1' INT TERM EXIT
+	while sleep 3600; do :; done
+}
+
+run_vkturn() {
+	local bin endpoint local_endpoint threads link host port args
+	bin="$(bin_find vk-turn-proxy)" || {
+		status_write stopped vkturn "vk-turn-proxy binary not found"
+		return 127
+	}
+
+	config_get endpoint vkturn endpoint ''
+	config_get local_endpoint vkturn local_endpoint '127.0.0.1:9000'
+	config_get threads vkturn threads '24'
+	config_get link vkturn link ''
+	config_get host vkturn turn_host ''
+	config_get port vkturn turn_port ''
+
+	args="-l $local_endpoint -t $threads"
+	[ -n "$endpoint" ] && args="$args -e $endpoint"
+	[ -n "$host" ] && args="$args --turn-host $host"
+	[ -n "$port" ] && args="$args --turn-port $port"
+	[ -n "$link" ] && args="$args $link"
+
+	status_write running vkturn "vk-turn-proxy started"
+	log "Starting VK TURN proxy"
+	# shellcheck disable=SC2086
+	exec "$bin" $args
+}
+
+cmd_run() {
+	config_get_main
+	: > "$LOG"
+	start_byedpi
+
+	case "$BACKEND" in
+		xray) run_xray ;;
+		vkturn) run_vkturn ;;
+		wireguard) run_wg_like wireguard ;;
+		amneziawg) run_wg_like amneziawg ;;
+		byedpi)
+			status_write running byedpi "ByeDPI helper started"
+			while sleep 3600; do :; done
+			;;
+		*)
+			status_write stopped "$BACKEND" "Unknown backend"
+			log "Unknown backend: $BACKEND"
+			return 1
+			;;
+	esac
+}
+
+cmd_status() {
+	if [ -s "$STATUS" ]; then
+		cat "$STATUS"
+	else
+		status_write stopped unknown "not started"
+		cat "$STATUS"
+	fi
+}
+
+cmd_log() {
+	local lines="${1:-120}"
+	[ -s "$LOG" ] && tail -n "$lines" "$LOG"
+}
+
+case "$1" in
+	run) shift; cmd_run "$@" ;;
+	status) cmd_status ;;
+	log) shift; cmd_log "$@" ;;
+	*) echo "Usage: $0 {run|status|log [lines]}" >&2; exit 2 ;;
+esac
