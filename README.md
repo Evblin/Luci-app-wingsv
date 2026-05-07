@@ -2,6 +2,8 @@
 
 LuCI web interface and OpenWrt service wrapper inspired by WINGS V.
 
+[Инструкция на русском: установка и загрузка на роутер](INSTALL_RU.md)
+
 The package stores settings in `/etc/config/wingsv` and exposes:
 
 - status and service controls
