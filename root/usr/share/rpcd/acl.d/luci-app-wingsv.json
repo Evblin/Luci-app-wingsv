@@ -1,0 +1,26 @@
+{
+	"luci-app-wingsv": {
+		"description": "Grant access to WINGS V configuration and service controls",
+		"read": {
+			"uci": [ "wingsv" ],
+			"ubus": {
+				"service": [ "list" ]
+			},
+			"file": {
+				"/usr/bin/wingsv": [ "exec" ],
+				"/tmp/wingsv.status": [ "read" ],
+				"/tmp/wingsv.log": [ "read" ]
+			}
+		},
+		"write": {
+			"uci": [ "wingsv" ],
+			"ubus": {
+				"service": [ "set" ]
+			},
+			"file": {
+				"/etc/init.d/wingsv": [ "exec" ],
+				"/usr/bin/wingsv": [ "exec" ]
+			}
+		}
+	}
+}
