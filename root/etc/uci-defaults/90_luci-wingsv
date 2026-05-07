@@ -1,0 +1,4 @@
+#!/bin/sh
+
+[ -x /etc/init.d/wingsv ] && /etc/init.d/wingsv enable >/dev/null 2>&1
+exit 0
